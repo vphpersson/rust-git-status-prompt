@@ -2,15 +2,6 @@ extern crate git2;
 
 use git2::{Branch, Repository, Status, StatusOptions};
 
-const COLOR_BLACK_BOLD: &str = "%{\x1b[30;1m%}";
-const COLOR_RED_BOLD: &str = "%{\x1b[31;1m%}";
-const COLOR_GREEN_BOLD: &str = "%{\x1b[32;1m%}";
-const COLOR_YELLOW_BOLD: &str = "%{\x1b[33;1m%}";
-const COLOR_BLUE_BOLD: &str = "%{\x1b[34;1m%}";
-const COLOR_MAGENTA_BOLD: &str = "%{\x1b[35;1m%}";
-const COLOR_CYAN_BOLD: &str = "%{\x1b[36;1m%}";
-const COLOR_RESET: &str = "%{\x1b[0m%}";
-
 struct Counts {
     changed: usize,
     conflicts: usize,
@@ -19,39 +10,35 @@ struct Counts {
 }
 
 fn get_status_counts(repo: &Repository) -> Counts {
-    let mut counts = Counts {
-        changed: 0,
-        conflicts: 0,
-        staged: 0,
-        untracked: 0,
-    };
+    let mut counts = Counts {changed: 0, conflicts: 0, staged: 0, untracked: 0};
 
     let mut opts = StatusOptions::new();
     opts.include_untracked(true);
 
     let statuses = repo
         .statuses(Some(&mut opts))
-        .expect("Unable to gather status information.");
+        .expect("Unable to gather status information.")
+    ;
 
     let mut staged = Status::empty();
-    staged.insert(git2::STATUS_INDEX_NEW);
-    staged.insert(git2::STATUS_INDEX_MODIFIED);
-    staged.insert(git2::STATUS_INDEX_DELETED);
-    staged.insert(git2::STATUS_INDEX_RENAMED);
-    staged.insert(git2::STATUS_INDEX_TYPECHANGE);
+    staged.insert(Status::INDEX_NEW);
+    staged.insert(Status::INDEX_MODIFIED);
+    staged.insert(Status::INDEX_DELETED);
+    staged.insert(Status::INDEX_RENAMED);
+    staged.insert(Status::INDEX_TYPECHANGE);
 
     let mut changed = Status::empty();
-    changed.insert(git2::STATUS_WT_MODIFIED);
-    changed.insert(git2::STATUS_WT_DELETED);
-    changed.insert(git2::STATUS_WT_RENAMED);
-    changed.insert(git2::STATUS_WT_TYPECHANGE);
+    changed.insert(Status::WT_MODIFIED);
+    changed.insert(Status::WT_DELETED);
+    changed.insert(Status::WT_RENAMED);
+    changed.insert(Status::WT_TYPECHANGE);
 
     for entry in statuses.iter() {
         match entry.status() {
             s if s.intersects(staged) => counts.staged += 1,
             s if s.intersects(changed) => counts.changed += 1,
-            s if s.contains(git2::STATUS_CONFLICTED) => counts.conflicts += 1,
-            s if s.contains(git2::STATUS_WT_NEW) => counts.untracked += 1,
+            s if s.contains(Status::CONFLICTED) => counts.conflicts += 1,
+            s if s.contains(Status::WT_NEW) => counts.untracked += 1,
             _ => (),
         }
     }
@@ -84,7 +71,7 @@ fn ahead_behind(repo: &Repository) -> (usize, usize) {
     }
 }
 
-fn branch_name(repo: &Repository) -> String {
+fn get_branch_name(repo: &Repository) -> String {
     let default = String::from("master");
 
     let head = match repo.head() {
@@ -101,7 +88,7 @@ fn branch_name(repo: &Repository) -> String {
             Branch::wrap(head)
                 .name()
                 .expect("Unable to determine name of branch.")
-                .unwrap(),
+                .unwrap()
         );
     }
 
@@ -110,7 +97,7 @@ fn branch_name(repo: &Repository) -> String {
         .expect("Unable to open config for this repository.");
     let hash_length = match config.get_i32("core.abbrev") {
         Ok(l) => l + 1,
-        Err(_) => 9,
+        Err(_) => 9
     };
 
     match head.symbolic_target() {
@@ -130,50 +117,21 @@ fn branch_name(repo: &Repository) -> String {
 fn main() {
     let repo = match Repository::discover(".") {
         Ok(repo) => repo,
-        Err(_) => return, // no repo, exit silently
+        Err(_) => return
     };
 
     let counts = get_status_counts(&repo);
-    let (ahead, behind) = ahead_behind(&repo);
-    let name = branch_name(&repo);
+    let (num_ahead, num_behind) = ahead_behind(&repo);
+    let branch_name = get_branch_name(&repo);
 
-    print!("{}{}", COLOR_RESET, name);
-
-    if behind > 0 {
-        print!("{}<{}", COLOR_RED_BOLD, behind);
-    }
-
-    if ahead > 0 {
-        print!("{}>{}", COLOR_CYAN_BOLD, ahead);
-    }
-
-    print!("{}/", COLOR_BLACK_BOLD);
-
-    let mut clean = true;
-
-    if counts.staged > 0 {
-        clean = false;
-        print!("{}-{}", COLOR_YELLOW_BOLD, counts.staged);
-    }
-
-    if counts.conflicts > 0 {
-        clean = false;
-        print!("{}!{}", COLOR_RED_BOLD, counts.conflicts);
-    }
-
-    if counts.changed > 0 {
-        clean = false;
-        print!("{}+{}", COLOR_BLUE_BOLD, counts.changed);
-    }
-
-    if counts.untracked > 0 {
-        clean = false;
-        print!("{}_{}", COLOR_MAGENTA_BOLD, counts.untracked);
-    }
-
-    if clean {
-        print!("{}=", COLOR_GREEN_BOLD);
-    }
-
-    println!("{} :: {}", COLOR_BLACK_BOLD, COLOR_RESET);
+    println!(
+        "{} {} {} {} {} {} {}",
+        branch_name,
+        num_ahead,
+        num_behind,
+        counts.staged,
+        counts.conflicts,
+        counts.changed,
+        counts.untracked
+    );
 }
